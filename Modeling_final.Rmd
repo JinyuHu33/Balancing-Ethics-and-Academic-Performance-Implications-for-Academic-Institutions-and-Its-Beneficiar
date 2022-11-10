@@ -1,0 +1,136 @@
+---
+title: "Final modeling"
+author: "Jinyu Hu"
+date: "12/17/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+## 1.Load the data
+```{r, include = FALSE}
+data_sp <- read.csv(file = "DataEthicsPerformance.csv")
+head(data_sp)
+library("Hmisc")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 2.Select variables into the model 
+
+```{r echo = T, results = 'hide'}
+#Find the Good model to illustrating the relationship between 5 latent 
+#variables(Justice, Relativist,Egoism, Utilitarianism, Denotology) and Student 
+#Academic Achievement 
+res <- cor(data_sp)
+round(res, 2)
+res2 <- rcorr(as.matrix(data_sp))
+#1 Generating the Full model with all independent and dependent variables
+full.mod = lm(AA1 + AA2 ~ J1 + J2 + R1 + R2 + E1 + E2 + U1 + U2 + U3 + D1 + D2,
+              data = data_sp)
+summary(full.mod)
+anova(full.mod)
+# Summary of full model
+qf(0.95,5,21)
+###Estimating set-up model which contains eleven explanatory variables and two 
+###Response variable. Then, setting up hypothesis to determine if there exists 
+###at least one explanatory variable that 
+###should be included in the model by using partial by conducting partial F test
+###to address P-value for each explanatory variables.
+
+# Full Model
+full.mod = lm(AA1 + AA2 ~ J1 + J2 + R1 + R2 + E1 + E2 + U1 + U2 + U3 + D1 + D2, data = data_sp)
+red.mod  = lm(AA1 + AA2 ~ R2 + R1 + D2, data = data_sp) ### New Reduction model 
+qf(0.95,5,21) ### Testing critical value of reduction model see whether critical
+#value greater than 1.96  
+summary(red.mod)
+
+```
+
+## 3. Set up function to calculate the AIC BIC,R^2, AdjustR^2, and PRESS testing 
+
+```{r echo = T, results = 'hide'}
+ 
+fit.stat<-function(model, data) {
+  mod.fit<-lm(formula = model, data = data)
+  sum.fit<-summary(mod.fit)
+  n <-length(mod.fit$residuals)
+  aic.mod<-AIC(object = mod.fit, k = 2)
+  BIC.mod<-AIC(object = mod.fit, k = log(n))
+  sse<-anova(mod.fit)$"Sum Sq"[length(anova(mod.fit)$"Sum Sq")]
+  p<-length(mod.fit$coefficients)
+  press<-sum(mod.fit$residuals^2/(1 - lm.influence(mod.fit)$hat)^2)
+  data.frame(Rsq = sum.fit$r.squared, AdjRsq = sum.fit$adj.r.squared,
+             AIC.stat = aic.mod, BIC.stat = BIC.mod, PRESS = press)
+}
+
+# Start with full model of our reduction model  
+full.mod.reg <- lm(AA1 + AA2 ~ R2 + R1 + D2, data = data_sp)
+summary(full.mod.reg)
+MSE.all <- summary(full.mod.reg)$sigma^2                # Mean Square Error
+MSE.all
+
+# Use Fit options to see if R2, should be included: it's arguable whether R2 should be included
+mod1 = fit.stat(model =  AA1 + AA2 ~ R2 , data = data_sp)
+# Use Fit options to see if R1, should be included: it's arguable whether R1 should be included
+mod2 = fit.stat(model = AA1 + AA2 ~ R2 + R1 , data = data_sp)
+# Use Fit options to see if D2, should be included: it's arguable whether R2 should be included
+mod3 = fit.stat(model = AA1 + AA2 ~ R2 + R1 + D2, data = data_sp)
+
+fit.results = cbind(name = 1:3, rbind(mod1, mod2, mod3))
+fit.results
+###Compare 5 testing value(Adjust R square, R square, AIC stat, BIC stat, and PRESS). 
+###The mod3 has heighest R value and adjust R square value, and has lowest AIC 
+###and BIC value, lastly lowest PRESS value. 
+
+mod4 = fit.stat(model = AA1 + AA2 ~ R2 + R1 + D2 + I(R2^2), data = data_sp)
+mod5 = fit.stat(model = AA1 + AA2 ~ R2 + R1 + D2 + I(R1^2), data = data_sp)
+mod6 = fit.stat(model = AA1 + AA2 ~ R2 + R1 + D2 + I(D2^2), data = data_sp)
+fit.results = cbind(name = 1:3, rbind(mod4, mod5, mod6))
+fit.results
+
+```
+## 4.Residual Plot
+```{r, fig.show='hide'}
+full.mod.reg <- lm(AA1 + AA2 ~ R2 + R1 + D2 + I(D2^2), data = data_sp)
+# residuals vs R2
+plot(x = data_sp$R2, y = full.mod.reg$residuals, main = "R1 vs. Residuals",
+     xlab = "R2", ylab = "Residuals")
+abline(h=0, col="red")
+
+# residuals vs R1
+plot(x = data_sp$R1, y = full.mod.reg$residuals, main = "R2 vs. Residuals",
+     xlab = "R1", ylab = "Residuals")
+abline(h=0, col="red")
+
+#residuals vs D2
+plot(x = data_sp$D2, y = full.mod.reg$residuals, main = "D2 vs. Residuals",
+     xlab = "D2", ylab = "Residuals")
+abline(h=0, col="red")
+
+#residual vsI(D2^2)
+plot(x = data_sp$D2, y = full.mod.reg$residuals, main = "I(D2^2) vs. Residuals",
+     xlab = "I(D2^2)", ylab = "Residuals")
+abline(h=0, col="red")
+# residuals vs predicted values
+plot(x = full.mod.reg$fitted.values, y = full.mod.reg$residuals,main="Predicted Values vs. Residuals",
+     xlab = "PREDICTED VALUE", ylab = "Residuals")
+abline(h=0, col="red")
+
+# Box-Cox transformation
+```
+## 5.Box-Cox transformation 
+```{r, fig.show='hide'}
+library(MASS) # Box Cox function is in the MASS library
+save.bc<-boxcox(object = full.mod.reg, lambda = seq(from = -10, to = 10, by = 0.01))
+title(main = "Box-Cox transformation plot")
+lambda.hat<-save.bc$x[save.bc$y == max(save.bc$y)] 
+lambda.hat # raise y-hat to this power for transformation
+
+mod.fit.trans<-lm(formula = (AA1+AA2)^lambda.hat ~ R2 + R1 + D2 + I(D2^2), data = data_sp)
+library(MASS) # Box Cox function is in the MASS library
+save.bc<-boxcox(object = mod.fit.trans, lambda = seq(from = -10, to = 10, by = 0.01))
+title(main = "Box-Cox transformation plot")
+lambda.hat<-save.bc$x[save.bc$y == max(save.bc$y)] 
+lambda.hat # raise y-hat to this power for transformation
+
+```
+
